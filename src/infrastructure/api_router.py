@@ -34,6 +34,18 @@ async def autorizar(
     payload: AutorizacaoRequestDTO,
     idempotency_key: str = Header(..., alias="Idempotency-Key")
 ):
+    """
+    Endpoint para autorizar transações financeiras.
+    
+    Aplica validação de regras de domínio e persiste as alterações no banco de dados.
+    Utiliza tratamento global de exceções, respondendo com:
+    - 201: Criado com sucesso
+    - 402: Limite insuficiente (Payment Required)
+    - 404: Contrato não encontrado
+    - 409: Conflito de versão no banco de dados (Optimistic Locking)
+    - 422: Regra de negócio violada
+    - 500: Erro interno
+    """
     # Idempotency is usually handled by AWS Lambda Powertools at the handler level.
     # In this FastAPI wrapper, the request simply passes the idempotency_key for tracing.
     req = AutorizacaoRequest(
@@ -47,19 +59,12 @@ async def autorizar(
         correlation_id=idempotency_key
     )
 
-    try:
-        response = use_case.executar(req)
-        return AutorizacaoResponseDTO(
-            id_autorizacao=response.id_autorizacao,
-            saldo_reservado=response.saldo_reservado
-        )
-    except ContratoNaoEncontradoError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except LimiteInsuficienteError as e:
-        raise HTTPException(status_code=402, detail=str(e))
-    except DomainError as e:
-        if "concorrência" in str(e).lower():
-            raise HTTPException(status_code=409, detail="Conflito de estado. Tente novamente.")
-        raise HTTPException(status_code=422, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail="Erro interno do servidor")
+    # Execução do caso de uso.
+    # As exceções de domínio lançadas aqui serão interceptadas 
+    # pelos @app.exception_handler no main.py, limpando o código da rota.
+    response = use_case.executar(req)
+    
+    return AutorizacaoResponseDTO(
+        id_autorizacao=response.id_autorizacao,
+        saldo_reservado=response.saldo_reservado
+    )

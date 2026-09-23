@@ -10,6 +10,9 @@ from src.application.ports import ContratoRepository, EventPublisher
 
 @dataclass
 class AutorizacaoRequest:
+    """
+    DTO (Data Transfer Object) contendo os dados de entrada para a requisição de autorização.
+    """
     id_contrato: str
     id_conta: str
     valor: Decimal
@@ -21,15 +24,42 @@ class AutorizacaoRequest:
 
 @dataclass
 class AutorizacaoResponse:
+    """
+    DTO (Data Transfer Object) contendo o resultado da operação de autorização.
+    """
     id_autorizacao: str
     saldo_reservado: Decimal
 
 class AutorizarTransacaoUseCase:
+    """
+    Caso de Uso principal responsável por orquestrar a autorização de uma transação.
+    Aplica as regras de domínio, persiste o estado via portas (Repositórios)
+    e propaga eventos de domínio.
+    """
     def __init__(self, contrato_repo: ContratoRepository, event_publisher: EventPublisher):
         self.contrato_repo = contrato_repo
         self.event_publisher = event_publisher
 
     def executar(self, request: AutorizacaoRequest) -> AutorizacaoResponse:
+        """
+        Executa o fluxo de autorização.
+        
+        Fluxo:
+        1. Busca o contrato no banco de dados.
+        2. Tenta reservar o limite usando a regra de domínio (Domain Driven Design).
+        3. Persiste a alteração no repositório.
+        4. Publica um evento assíncrono para notificação de sistemas downstream.
+
+        Args:
+            request (AutorizacaoRequest): Dados da transação.
+
+        Returns:
+            AutorizacaoResponse: O UUID da autorização e o saldo que foi reservado.
+            
+        Raises:
+            ContratoNaoEncontradoError: Se o contrato não existir na base.
+            LimiteInsuficienteError: Se o saldo for inferior ao solicitado.
+        """
         # 1. Buscar contrato
         contrato = self.contrato_repo.buscar_por_id(request.id_contrato)
         if not contrato:
